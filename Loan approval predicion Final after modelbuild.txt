@@ -1,0 +1,154 @@
+import pandas as pa
+data_train= pa.read_csv(r'C:\Users\vicky\Desktop\train_filled data.csv')
+data_test= pa.read_csv(r'C:\Users\vicky\Desktop\test_Y3wMUE5_7gLdaTN.csv')
+
+#Adding new feature
+data_train.insert(8, 'Total_Income',(data_train['ApplicantIncome']+data_train['CoapplicantIncome']))
+
+data_test.insert(8, 'Total_Income',(data_test['ApplicantIncome']+data_test['CoapplicantIncome']))
+
+
+# fill blank fields 
+data_train['Dependents'].fillna(data_train['Dependents'].mode()[0], inplace=True)
+data_train['Loan_Amount_Term'].fillna(data_train['Loan_Amount_Term'].mode()[0], inplace=True)
+data_train['Credit_History'].fillna(data_train['Credit_History'].mode()[0], inplace=True)
+
+
+data_test['Dependents'].fillna(data_test['Dependents'].mode()[0], inplace=True)
+data_test['Loan_Amount_Term'].fillna(data_test['Loan_Amount_Term'].mode()[0], inplace=True)
+data_test['Credit_History'].fillna(data_test['Credit_History'].mode()[0], inplace=True)
+data_test['Gender'].fillna(data_test['Gender'].mode()[0], inplace=True)
+data_test['Self_Employed'].fillna(data_test['Self_Employed'].mode()[0], inplace=True)
+data_test['LoanAmount'].fillna(data_test['LoanAmount'].mode()[0], inplace=True)
+
+
+#Drop unwanted tables
+data_train.drop(labels = 'Loan_ID', axis = 1, inplace = True)
+data_train.drop(labels = 'ApplicantIncome', axis = 1, inplace = True)
+data_train.drop(labels = 'CoapplicantIncome', axis = 1, inplace = True)
+
+
+data_test.drop(labels = 'Loan_ID', axis = 1, inplace = True)
+data_test.drop(labels = 'ApplicantIncome', axis = 1, inplace = True)
+data_test.drop(labels = 'CoapplicantIncome', axis = 1, inplace = True)
+
+#print (data_train)
+# Dependent Variable
+y_train=data_train[['Loan_Status']].copy()
+
+# Independent Variables
+X_train=data_train[['Gender', 'Married', 'Dependents', 'Education', 'Self_Employed',
+       'Total_Income', 'LoanAmount', 'Loan_Amount_Term', 'Credit_History',
+       'Property_Area']].copy()
+
+
+X_test=data_test[['Gender', 'Married', 'Dependents', 'Education', 'Self_Employed',
+       'Total_Income', 'LoanAmount', 'Loan_Amount_Term', 'Credit_History',
+       'Property_Area']].copy()
+
+#print(X_train.columns)
+#print(X_test.columns)
+
+from sklearn.preprocessing import LabelEncoder
+var_mod = ['Gender','Married','Dependents','Education','Self_Employed','Property_Area']
+le1 = LabelEncoder()
+for i in var_mod:
+    X_train[i] = le1.fit_transform(X_train[i])
+#y_train['Loan_Status'] = le1.fit_transform(y_train.Loan_Status)
+#encoded=y_train['Loan_Status']
+#print(encoded)
+X_train.dtypes 
+
+#print(X_test)
+
+le2 = LabelEncoder()
+for i in var_mod:
+    X_test[i] = le2.fit_transform(X_test[i])
+X_test.dtypes 
+
+
+#feature scalling
+from sklearn.preprocessing import StandardScaler
+sc_X = StandardScaler()
+X_train_scaled = sc_X.fit_transform(X_train.values)
+X_train = pd.DataFrame(X_train_scaled, index=X_train.index, columns=X_train.columns)
+#X_train['Loan_Status']=encoded
+
+#X_train.drop(labels = 'Loan_Status', axis = 1, inplace = True)
+
+X_test_scaled = sc_X.fit_transform(X_test.values)
+X_test = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
+
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import RepeatedKFold  #For K-fold cross validation
+rkf = RepeatedKFold(n_splits=5, n_repeats=10, random_state=None)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier, export_graphviz
+from sklearn import metrics
+from sklearn.metrics import classification_report, confusion_matrix  
+
+
+
+#Generic function for making a classification model and accessing performance:
+def classification_model(model, data, predictors, outcome):
+  #Fit the model:
+  model.fit(data[predictors],data[outcome])
+  
+  #Make predictions on training set:
+  predictions = model.predict(data[predictors])
+  
+  #Print accuracy
+  accuracy = metrics.accuracy_score(predictions,data[outcome])
+  print ("Accuracy : %s" % "{0:.3%}".format(accuracy))
+
+  #Perform k-fold cross-validation with 5 folds
+  rkf = RepeatedKFold(n_splits=5, n_repeats=10, random_state=None)
+  error = []
+  for train, test in rkf.split(X):
+    # Filter training data
+    train_predictors = (data[predictors].iloc[train,:])
+    
+    # The target we're using to train the algorithm.
+    train_target = data[outcome].iloc[train]
+    
+    # Training the algorithm using the predictors and target.
+    model.fit(train_predictors, train_target)
+    
+    #Record error from each cross-validation run
+    error.append(model.score(data[predictors].iloc[test,:], data[outcome].iloc[test]))
+ 
+  print ("Cross-Validation Score : %s" % "{0:.3%}".format(np.mean(error)))
+  print(confusion_matrix(data[outcome],predictions))  
+  print(classification_report(data[outcome],predictions)) 
+
+  #Fit the model again so that it can be refered outside the function:
+  model.fit(data[predictors],data[outcome])
+
+outcome_var = 'Loan_Status'
+model = DecisionTreeClassifier()
+#predictor_var = var_mod
+predictor_var = ['Credit_History','Total_Income','LoanAmount','Self_Employed','Education','Dependents','Property_Area']
+classification_model(model, data_train,predictor_var,outcome_var)
+
+def Predic_classification_model(model,X_train,y_train,X_test, predictors, outcome):
+  #Fit the model:
+  model.fit(X_train[predictors],y_train[outcome])
+  
+  #Make predictions on training set:
+  predictions = model.predict(X_test[predictors])
+  pd.DataFrame(predictions, columns = ['Loan_Status']).to_excel("y_pred.xlsx", index = False)
+ 
+outcome_var = 'Loan_Status'
+model = DecisionTreeClassifier()
+#predictor_var = var_mod
+predictor_var = ['Credit_History','Total_Income','LoanAmount']
+Predic_classification_model(model, X_train,y_train,X_test,predictor_var,outcome_var)
+
+
+#print("\nFeatures/Columns : \n", X_train.columns)
+
+
+
+
+
